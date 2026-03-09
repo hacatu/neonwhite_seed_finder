@@ -1,0 +1,30 @@
+cargo-features = ["profile-rustflags"]
+[package]
+name = "neonwhite_seed_finder"
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+rustflags = ["-Clink-arg=-L/usr/local/lib", "-Zthreads=8"]
+
+[profile.release-lto]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+strip = "symbols"
+rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-L/usr/local/lib", "-Zthreads=8"]
+
+[profile.release-trapv]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+overflow-checks = true
+strip = "symbols"
+rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-L/usr/local/lib", "-Zthreads=8"]
+
+[dependencies]
+bit-set = "0.8.0"
+itertools = "0.14.0"
+ocl = "0.19.7"
+rayon = "1.11.0"
+

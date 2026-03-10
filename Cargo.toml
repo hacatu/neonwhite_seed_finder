@@ -3,6 +3,10 @@ cargo-features = ["profile-rustflags"]
 name = "neonwhite_seed_finder"
 version = "0.1.0"
 edition = "2024"
+authors = ["hacatu"]
+description = "Find and simulate seeds for neon white level rushes"
+repository = "https://github.com/hacatu/neonwhite_seed_finder"
+license = "MPL-2.0"
 
 [profile.dev]
 rustflags = ["-Clink-arg=-L/usr/local/lib", "-Zthreads=8"]

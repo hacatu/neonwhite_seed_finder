@@ -97,7 +97,7 @@ pub fn try_setup_gpu() -> AResult<Option<Gpu>> {
 	};
 	// println!("DEBUG: starting GPU setup");
 	let mut pro_que = ProQue::builder().platform(p).device(d).src(src).build().context("Compiling GPU code")?;
-	println!("DEBUG: ocl selected OpenCL device {}", pro_que.device().name()?);
+	println!("DEBUG: selected GPU \"{}\"", pro_que.device().name()?);
 	let wg_size = 1 << 20;
 	pro_que.set_dims(wg_size);
 	let s_lo_bound = (1 << 31)/wg_size as u32;

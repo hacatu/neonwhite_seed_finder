@@ -81,6 +81,7 @@ fn try_simulate(args: Vec<String>) -> AResult<()> {
 		} else {
 			(&args[1..args.len()-1], &args[args.len()-1])
 		};
+	println!("INFO: Simulating seed {seed}");
 	let (rush_name, level_set) = guess_rush_from_abbr(rush_abbr)?;
 	println!("INFO: Using rush name \"{rush_name}\"");
 	let seed = match i32::from_str_radix(seed.as_str(), 10) {
@@ -108,6 +109,7 @@ fn try_find(args: Vec<String>) -> AResult<()> {
 		}
 		"find".starts_with(&args[i])
 	} else { false };
+	println!("INFO: Finding seeds");
 	let (rush_abbr, count, description) = (
 		&args[1..idx-have_count as usize-have_subcommand as usize],
 		if have_count {i32::from_str_radix(&args[idx-1], 10).unwrap()} else {1},
@@ -119,11 +121,14 @@ fn try_find(args: Vec<String>) -> AResult<()> {
 	let rules = guess_rules_from_description(description, level_set)?;
 	match try_setup_gpu()? {
 		Some(gpu) => {
+			// TODO: dropping the gpu buffers immediately is fine for a one-shot cli, but in a batch mode cli or gui
+			// we should cache it
 			let it = find_matching_seeds_gpu(level_set.len(), count as _, &rules, &gpu)?;
 			print!("[");
 			for s in it { print!("{s},"); }
 		},
 		None => {
+			println!("WARNING: No GPU found.  A full search of all 2^31 seeds could take a few minutes.");
 			let it = find_matching_seeds_cpu(level_set.len(), count as _, &rules)?;
 			print!("[");
 			for s in it { print!("{s},"); }
@@ -133,8 +138,8 @@ fn try_find(args: Vec<String>) -> AResult<()> {
 	AOk(())
 }
 
-fn try_best(args: Vec<String>) -> AResult<()> {
-	todo!()
+fn try_best(_args: Vec<String>) -> AResult<()> {
+	todo!("Finding best seeds for reset efficiency is not yet implemented")
 }
 
 fn main() -> AResult<()> {

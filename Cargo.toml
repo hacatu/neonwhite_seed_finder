@@ -23,6 +23,7 @@ strip = "symbols"
 rustflags = ["-Ctarget-cpu=native", "-Clink-arg=-L/usr/local/lib", "-Zthreads=8"]
 
 [dependencies]
+anyhow = "1.0.102"
 bit-set = "0.8.0"
 itertools = "0.14.0"
 ocl = "0.19.7"

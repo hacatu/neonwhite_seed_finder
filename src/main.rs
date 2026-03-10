@@ -1,8 +1,10 @@
 #![feature(iter_collect_into, test)]
-use std::{collections::HashMap, iter, process::exit, sync::LazyLock};
+use std::{collections::HashMap, iter, sync::LazyLock};
 use bit_set::BitSet;
 use itertools::Itertools;
 use rayon::prelude::*;
+use ocl::ProQue;
+use anyhow::{Result as AResult, Ok as AOk, bail};
 
 static ALL_LEVELS: LazyLock<Vec<&'static str>> = LazyLock::new(||vec![
 	"Movement",
@@ -264,7 +266,7 @@ fn is_abbreviation(cleanedname: &str, fullname: &str) -> bool {
 	true
 }
 
-fn lookup_name(name: &str, level_set: &BitSet) -> usize {
+fn lookup_name(name: &str, level_set: &BitSet) -> AResult<usize> {
 	let mut res = None;
 	let cleanedname = name.to_lowercase().replace("1", "i").replace("2", "ii");
 	let mut j = 0;
@@ -276,14 +278,13 @@ fn lookup_name(name: &str, level_set: &BitSet) -> usize {
 			continue;
 		}
 		if res.is_some() {
-			println!("Level name \"{name}\" is ambigious and could match \"{}\" or \"{fullname}\"", ALL_LEVELS[res.unwrap()]);
-			exit(1);
+			bail!("Level name \"{name}\" is ambigious and could match \"{}\" or \"{fullname}\"", ALL_LEVELS[res.unwrap()]);
 		}
 		res = Some(i);
 		actual_res = j;
 		j += 1;
 	}
-	match res {
+	AOk(match res {
 		Some(_) => actual_res,
 		None => {
 			for &(fullname, i) in ALTERNATE_NAMES.iter() {
@@ -291,18 +292,16 @@ fn lookup_name(name: &str, level_set: &BitSet) -> usize {
 					continue;
 				}
 				if res.is_some() {
-					println!("Level name \"{name}\" matches no proper levels, but abbreviations for both \"{}\" and \"{}\"", ALL_LEVELS[res.unwrap()], ALL_LEVELS[i]);
-					exit(1);
+					bail!("Level name \"{name}\" matches no proper levels, but abbreviations for both \"{}\" and \"{}\"", ALL_LEVELS[res.unwrap()], ALL_LEVELS[i]);
 				}
 				res = Some(i);
 			}
 			let Some(res) = res else {
-				println!("Level name \"{name}\" did not match anything");
-				exit(1);
+				bail!("Level name \"{name}\" did not match anything");
 			};
 			level_set.iter().filter(|&i|i<res).count()
 		}
-	}
+	})
 }
 
 enum Rule {
@@ -395,10 +394,10 @@ fn print_usage() {
 	println!("\"best\" is TODO, it will find the best seeds that put your most inconsistent stages first");
 }
 
-fn guess_rush_from_abbr(rush_abbr: &[String]) -> &BitSet {
+fn guess_rush_from_abbr(rush_abbr: &[String]) -> AResult<&BitSet> {
 	let cleanedname = rush_abbr.into_iter().map(|s|s.to_lowercase()).join(" ");
 	if cleanedname.len() == 0 {
-		return &LEVEL_SETS["White"];
+		return AOk(&LEVEL_SETS["White"]);
 	}
 	if let Ok(idx) = i32::from_str_radix(&cleanedname.replace(|s: char|s.is_whitespace(), ""), 10) {
 		const KEYS: [&'static str; 16] = [
@@ -420,33 +419,30 @@ fn guess_rush_from_abbr(rush_abbr: &[String]) -> &BitSet {
 			"Yellow"
 		];
 		if 0 <= idx && idx < KEYS.len() as i32 {
-			return &LEVEL_SETS[KEYS[idx as usize]];
+			return AOk(&LEVEL_SETS[KEYS[idx as usize]]);
 		}
 		if idx == 1000 {
-			return &LEVEL_SETS["Thousand Pound Butterfly"];
+			return AOk(&LEVEL_SETS["Thousand Pound Butterfly"]);
 		}
 	}
 	let mut res: Option<(&str, &BitSet)> = None;
 	for (&fullname, level_set) in LEVEL_SETS.iter() {
 		if is_abbreviation(cleanedname.as_str(), fullname) {
 			if res.is_some() {
-				println!("Rush abbreviation \"{cleanedname}\" is ambiguous and could match {} or {fullname}", res.unwrap().0);
-				exit(1);
+				bail!("Rush abbreviation \"{cleanedname}\" is ambiguous and could match {} or {fullname}", res.unwrap().0);
 			}
 			res = Some((fullname, level_set));
 		}
 	}
 	let Some((_, res)) = res else {
-		println!("Rush abbreviation \"{cleanedname}\" did not match anything");
-		exit(1);
+		bail!("Rush abbreviation \"{cleanedname}\" did not match anything");
 	};
-	res
+	AOk(res)
 }
 
-fn guess_rule_once(description: &str, level_set: &BitSet) -> Rule {
+fn guess_rule_once(description: &str, level_set: &BitSet) -> AResult<Rule> {
 	let Some((a_chu, _description)) = description.split_once(":") else {
-		println!("The rule description \"{description}\" is not formatted correctly (no \":\" found) (should be \"INDEX?:INDEX? \"=\"|\">\" ID (\",\" ID)*\")");
-		exit(3);
+		bail!("The rule description \"{description}\" is not formatted correctly (no \":\" found) (should be \"INDEX?:INDEX? \"=\"|\">\" ID (\",\" ID)*\")");
 	};
 	let (b_chu, _description, is_seq) =
 		if let Some((b_chu, _description)) = _description.split_once("=") {
@@ -454,57 +450,55 @@ fn guess_rule_once(description: &str, level_set: &BitSet) -> Rule {
 		} else if let Some((b_chu, _description)) = _description.split_once(">") {
 			(b_chu, _description, false)
 		} else {
-			println!("The rule description \"{description}\" is not formatted correctly (no \"=\" or \">\" found) (should be \"INDEX?:INDEX? \"=\"|\">\" ID (\",\" ID)*\")");
-			exit(3);
+			bail!("The rule description \"{description}\" is not formatted correctly (no \"=\" or \">\" found) (should be \"INDEX?:INDEX? \"=\"|\">\" ID (\",\" ID)*\")");
 		};
-	let parse_index = |s|match i32::from_str_radix(s, 10) {
+	let parse_index = |s|AOk(match i32::from_str_radix(s, 10) {
 		Ok(i) => Some(
 			if i < 0 {
 				if i >= -(level_set.len()as i32) {
 					i + level_set.len()as i32
 				} else {
-					println!("The index \"{i}\" is out of range (it should be relative to the length of the rush)");
-					exit(2);
+					bail!("The index \"{i}\" is out of range (it should be relative to the length of the rush)");
 				}
 			} else if i < level_set.len()as i32 {
 				i
 			} else {
-				println!("The index \"{i}\" is out of range (it should be relative to the length of the rush)");
-				exit(2);
-			}as _
+				bail!("The index \"{i}\" is out of range (it should be relative to the length of the rush)");
+			}as usize
 		),
 		Err(_) => None
-	};
+	});
 	let level_ids = _description.split(",").map(|s|{
 		let s = s.trim();
-		match parse_index(s) {
+		AOk(match parse_index(s)? {
 			Some(i) => i,
-			None => lookup_name(s, level_set)
-		}
+			None => lookup_name(s, level_set)?
+		})
 	});
 	let mut res = if is_seq {
-		Rule::Sequence(0, 0, level_ids.map(|i|i as _).collect())
+		Rule::Sequence(0, 0, level_ids.map_ok(|i|i as _).try_collect()?)
 	} else {
-		Rule::Subset(0, 0, BitSet::from_iter(level_ids))
+		let mut s = BitSet::with_capacity(level_set.capacity());
+		for i in level_ids { // I'm not sure how to ergonomically deal with iterators of Result
+			s.insert(i?);
+		}
+		Rule::Subset(0, 0, s)
 	};
 	if res.len() == 0 {
-		println!("Empty level list for rule \"{description}\"");
-		exit(3);
+		bail!("Empty level list for rule \"{description}\"");
 	}
 	let a_chu = a_chu.trim();
 	let b_chu = b_chu.trim();
-	let guess_index = |s|match parse_index(s) {
+	let guess_index = |s|AOk(match parse_index(s)? {
 		Some(i) => i,
 		None => {
-			println!("Could not parse index \"{s}\"");
-			exit(3)
+			bail!("Could not parse index \"{s}\"");
 		}
-	};
-	let mut a = if a_chu.len() == 0 { 0 } else { guess_index(a_chu) };
-	let mut b = if b_chu.len() == 0 { level_set.len() } else { guess_index(b_chu) };
+	});
+	let mut a = if a_chu.len() == 0 { 0 } else { guess_index(a_chu)? };
+	let mut b = if b_chu.len() == 0 { level_set.len() } else { guess_index(b_chu)? };
 	if b <= a || b-a < res.len() {
-		println!("Range \"{a_chu}:{b_chu}\" is too small to fit the requested levels");
-		exit(2);
+		bail!("Range \"{a_chu}:{b_chu}\" is too small to fit the requested levels");
 	}
 	if is_seq && b-a > res.len() {
 		if b_chu.len() == 0 {
@@ -512,27 +506,25 @@ fn guess_rule_once(description: &str, level_set: &BitSet) -> Rule {
 		} else if a_chu.len() == 0 {
 			a += (b-a) - res.len()
 		} else {
-			println!("Range \"{a_chu}:{b_chu}\" is too large to fit the requested sequence");
-			exit(2);
+			bail!("Range \"{a_chu}:{b_chu}\" is too large to fit the requested sequence");
 		}
 	}
 	match &mut res {
 		Rule::Sequence(res_a, res_b, _) | Rule::Subset(res_a, res_b, _) => (*res_a, *res_b) = (a, b)
 	}
-	res
+	AOk(res)
 }
 
-fn guess_rules_from_description(description: &[String], level_set: &BitSet) -> Vec<Rule> {
+fn guess_rules_from_description(description: &[String], level_set: &BitSet) -> AResult<Vec<Rule>> {
 	let description = description.join(" ");
-	let res = description.split("&").map(|s|guess_rule_once(s, level_set)).collect_vec();
+	let res: Vec<_> = description.split("&").map(|s|guess_rule_once(s, level_set)).try_collect()?;
 	let mut domains = vec![None; level_set.len()];
 	let mut codomains = vec![None; level_set.len()];
 	for (i, rule) in res.iter().enumerate() {
 		for j in rule.iter_domain() {
 			match &mut domains[j] {
 				Some(i0) => {
-					println!("Rules {i0} and {i} overlap and both affect index {j} of the desired shuffle");
-					exit(2);
+					bail!("Rules {i0} and {i} overlap and both affect index {j} of the desired shuffle");
 				},
 				s @ None => *s = Some(i)
 			}
@@ -540,38 +532,30 @@ fn guess_rules_from_description(description: &[String], level_set: &BitSet) -> V
 		for j in rule.iter_codomain() {
 			match &mut codomains[j] {
 				Some(i0) => {
-					println!("Rules {i0} and {i} overlap and both include level {j} of the rush ({})", ALL_LEVELS[level_set.iter().nth(j).unwrap()]);
-					exit(2);
+					bail!("Rules {i0} and {i} overlap and both include level {j} of the rush ({})", ALL_LEVELS[level_set.iter().nth(j).unwrap()]);
 				},
 				s @ None => *s = Some(i)
 			}
 		}
 	}
-	res
+	AOk(res)
 }
 
-fn try_simulate(args: Vec<String>) {
+fn try_simulate(args: Vec<String>) -> AResult<()> {
 	let (rush_abbr, seed) =
 		if args.len() == 2 {
 			(&args[1..1], &args[1])
 		} else if let Some(s) = "help find best".split_whitespace().filter(|&s|s.starts_with(&args[args.len()-2])).next() {
-			println!("Bad subcommand format, looks like \"simulate\" but found \"{s}\"");
-			if s == "help" {
-				print_info();
-				print_usage();
-			} else {
-				println!("Try \"neonwhite_seed_finder help\" for details");
-			}
-			exit(2);
+			bail!("Bad subcommand format, looks like \"simulate\" but found \"{s}\"\nTry \"neonwhite_seed_finder help\" for details");
 		} else if "simulate".starts_with(&args[args.len()-2]) {
 			(&args[1..args.len()-2], &args[args.len()-1])
 		} else {
 			(&args[1..args.len()-1], &args[args.len()-1])
 		};
-	let level_set = guess_rush_from_abbr(rush_abbr);
+	let level_set = guess_rush_from_abbr(rush_abbr)?;
 	let seed = match i32::from_str_radix(seed.as_str(), 10) {
-		Err(_) => { println!("Could not parse seed from \"{seed}\""); exit(1); }
-		Ok(s) if s < 0 => { println!("Seed should not be negative"); exit(1); }
+		Err(_) => bail!("Could not parse seed from \"{seed}\""),
+		Ok(s) if s < 0 => bail!("Seed should not be negative"),
 		Ok(s) => s
 	};
 	let mut buf = Vec::with_capacity(level_set.len());
@@ -581,22 +565,23 @@ fn try_simulate(args: Vec<String>) {
 		print!("{}, ", ALL_LEVELS[level_set.iter().nth(i as _).unwrap()])
 	}
 	println!("]");
+	AOk(())
 }
 
-fn try_find(args: Vec<String>) {
+fn find_matching_seeds_cpu(level_count: usize, result_count: usize, rules: &[Rule]) -> AResult<impl Iterator<Item=i32>> {
+	AOk((0..i32::MAX).into_par_iter().map_init(||Vec::with_capacity(level_count), |buf, s|{
+		get_shuffled_idxs(level_count as _, s, buf);
+		(s, rules.iter().all(|r|r.matches(buf)))
+	}).filter_map(|(s, p)|if p {Some(s)} else {None}).take_any(result_count).collect_vec_list().into_iter().flatten())
+}
+
+fn try_find(args: Vec<String>) -> AResult<()> {
 	let idx = args.iter().skip(1).take_while(|&s|!s.contains(":")).count() + 1;
 	let have_count = idx > 1 && i32::from_str_radix(&args[idx-1], 10).is_ok();
 	let have_subcommand = if idx > 1 {
 		let i = if have_count { idx - 2 } else { idx - 1 };
 		if let Some(s) = "help simulate best".split_whitespace().filter(|&s|s.starts_with(&args[i])).next() {
-			println!("Bad subcommand format, looks like \"find\" but found \"{s}\"");
-			if s == "help" {
-				print_info();
-				print_usage();
-			} else {
-				println!("Try \"neonwhite_seed_finder help\" for details");
-			}
-			exit(2);
+			bail!("Bad subcommand format, looks like \"find\" but found \"{s}\"\nTry \"neonwhite_seed_finder help\" for details");
 		}
 		"find".starts_with(&args[i])
 	} else { false };
@@ -605,34 +590,33 @@ fn try_find(args: Vec<String>) {
 		if have_count {i32::from_str_radix(&args[idx-1], 10).unwrap()} else {1},
 		&args[idx..]
 	);
-	let level_set = guess_rush_from_abbr(rush_abbr);
-	let rules = guess_rules_from_description(description, level_set);
-	let res = (0..i32::MAX).into_par_iter().map_init(||Vec::with_capacity(level_set.len()), |buf, s|{
-		get_shuffled_idxs(level_set.len()as _, s, buf);
-		(s, rules.iter().all(|r|r.matches(buf)))
-	}).filter_map(|(s, p)|if p {Some(s)} else {None}).take_any(count as _).collect_vec_list();
+	let level_set = guess_rush_from_abbr(rush_abbr)?;
+	let rules = guess_rules_from_description(description, level_set)?;
+	let it = find_matching_seeds_cpu(level_set.len(), count as _, &rules)?;
 	print!("[");
-	for s in res.into_iter().flatten() {
+	for s in it {
 		print!("{s},");
 	}
 	println!("]");
+	AOk(())
 }
 
-fn try_best(args: Vec<String>) {
+fn try_best(args: Vec<String>) -> AResult<()> {
 	todo!()
 }
 
-fn main() {
+fn main() -> AResult<()> {
 	let args = std::env::args().collect_vec();
 	if args.iter().any(|s|s.contains(":")) {
-		try_find(args);
+		try_find(args)
 	} else if args.iter().any(|s|s.contains(".")) {
-		try_best(args);
+		try_best(args)
 	} else if args.len() == 1 || (args.len() == 2 && "help".starts_with(&args[1])) {
 		print_info();
 		print_usage();
+		AOk(())
 	} else {
-		try_simulate(args);
+		try_simulate(args)
 	}
 }
 
@@ -644,7 +628,7 @@ mod tests {
 	#[test]
 	fn check_nagy() {
 		let mut buf = Vec::with_capacity(96);
-		let expected = "Absolution,The Clocktower,The Third Temple,Pop,Shield,Cleaner".split(",").map(|n|lookup_name(n, &LEVEL_SETS["White"])as u8).collect_vec();
+		let expected = "Absolution,The Clocktower,The Third Temple,Pop,Shield,Cleaner".split(",").map(|n|lookup_name(n, &LEVEL_SETS["White"]).unwrap()as u8).collect_vec();
 		get_shuffled_idxs(96, 58685, &mut buf);
 		assert_eq!(buf[..expected.len()], expected);
 		let expected = (0..8).rev().collect_vec();

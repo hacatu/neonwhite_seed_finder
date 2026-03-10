@@ -66,6 +66,9 @@ Install rust, then run
 ```
 cargo install neonwhite_seed_finder
 ```
+you also need opencl, which is probably part of your GPU drivers but sometimes you will need to install
+additional things, for example on Ubuntu you must install `opencl-headers ocl-icd-opencl-dev`,
+on Arch Linux `opencl-headers ocl-icd` plus drivers like `intel-compute-runtime`, etc on other distributions.
 
 this will build and install the binary, on Linux it will be in `~/.cargo/bin/`, so that should be in your
 path if you want to be able to run `neonwhite_seed_finder` without specifying the full path.
@@ -98,4 +101,8 @@ Implementing this naively is about 1% slower than just implementing the rng dire
 type thing where we store `A[n]*s_hi` and `A[n]*s_lo + B[n]` and add them together.
 
 ## Possible Improvements/TODO:
-- 
+- Change CPU implementation to include speedups from GPU impl (flatten rules into byte vectors and use meet in the middle to compute rng outputs).  I know this would be about 2x faster since I accidentally ran the opencl code on the CPU before fixing it to select the correct device instead of the first device.
+- Add `best` subcommand
+- Add GUI
+- For a lot of conditions, like "the first x levels must contain these levels", we can greatly simplify shuffling and filtering.  For example, if we only have `k` subset rules, we can just "color" every level one of `k+1` colors and use `ceil(lb(k+1))` bits per element of the shuffle instead of 8.  This is only really worth pursuing in the extreme case when k=1.  That is, we want the first x levels to contain these levels, so we just represent the shuffle as a 96 bit vector with 1s for the levels we want and 0s for others, shuffle this bit vector, and check if the first x bits contain enough 1s at the end.  This is low priority because although it would be easy, it only really works for simple conditions with one subset rule and no sequence rules.  Although basically all realistic queries will be one or two subset rules about the beginning and/or end of the shuffle, so I might do just those cases, since it is likely over 2x faster.
+

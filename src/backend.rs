@@ -57,3 +57,33 @@ pub fn find_matching_seeds_cpu(level_count: usize, result_count: usize, rules: &
 	}).filter_map(|(s, p)|if p {Some(s)} else {None}).take_any(result_count).collect_vec_list().into_iter().flatten())
 }
 
+pub const APPROX_FACTORIALS: [f64; 97] = {
+	let mut res = [0.0; _];
+	res[0] = 1.0;
+	let mut i = 1;
+	while i <= 96 {
+		res[i] = i as f64*res[i-1];
+		i += 1;
+	}
+	res
+};
+
+pub fn estimate_result_count(level_count: usize, rules: &[Rule]) -> usize {
+	/*
+	The number of permutations that match `rules` (assuming it has no conflicts, which should have already been checked)
+	is the number of ways to choose the subset of the range corresponding to the given set for every rule, times the number
+	of ways to arrange each such subset, times the number of ways to arrange the free elements.
+
+	For example,.if "The Clocktower", "The Third Temple", and "Absolution" are among the first 4 levels, and "Waterworks",
+	"Movement", and "Godspeed" are among the last 4, there would be
+	(4 choose 3) * 3!   *   (4 choose 3) * 3!   *   90!
+	such permutations.  Note that (n choose m) * m! is just n!/(n-m)!.
+	*/
+	let free_elems = level_count - rules.iter().map(Rule::len).sum::<usize>();
+	let approx_valid_perms = rules.iter().filter_map(|r|match r {
+		Rule::Sequence(..) => None,
+		Rule::Subset(a, b, s) => Some(APPROX_FACTORIALS[(b-a)as usize]/APPROX_FACTORIALS[(b-a)as usize-s.len()])
+	}).product::<f64>()*APPROX_FACTORIALS[free_elems];
+	(approx_valid_perms*(1u32 << 31)as f64/APPROX_FACTORIALS[level_count])as _
+}
+

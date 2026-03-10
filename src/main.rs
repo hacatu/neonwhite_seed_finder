@@ -8,7 +8,7 @@ mod frontend;
 use itertools::Itertools;
 use anyhow::{Result as AResult, Ok as AOk, bail};
 use crate::{
-	backend::{find_matching_seeds_cpu, get_shuffled_idxs},
+	backend::{estimate_result_count, find_matching_seeds_cpu, get_shuffled_idxs},
 	backend_opencl::{find_matching_seeds_gpu, try_setup_gpu},
 	data::ALL_LEVELS,
 	frontend::{guess_rules_from_description, guess_rush_from_abbr}
@@ -115,25 +115,30 @@ fn try_find(args: Vec<String>) -> AResult<()> {
 		if have_count {i32::from_str_radix(&args[idx-1], 10).unwrap()} else {1},
 		&args[idx..]
 	);
+	if count < 1 {
+		bail!("Count {count} is too small, it should be at least 1");
+	}
 	let (rush_name, level_set) = guess_rush_from_abbr(rush_abbr)?;
-	// TODO: guess how many results there will be
-	println!("INFO: Using rush name \"{rush_name}\", result count {count}");
+	println!("INFO: Using rush name \"{rush_name}\", keeping up to {count} result(s)");
 	let rules = guess_rules_from_description(description, level_set)?;
-	match try_setup_gpu()? {
-		Some(gpu) => {
-			// TODO: dropping the gpu buffers immediately is fine for a one-shot cli, but in a batch mode cli or gui
-			// we should cache it
-			let it = find_matching_seeds_gpu(level_set.len(), count as _, &rules, &gpu)?;
-			print!("[");
-			for s in it { print!("{s},"); }
-		},
-		None => {
-			println!("WARNING: No GPU found.  A full search of all 2^31 seeds could take a few minutes.");
-			let it = find_matching_seeds_cpu(level_set.len(), count as _, &rules)?;
-			print!("[");
-			for s in it { print!("{s},"); }
-		}
-	};
+	let estimated_result_count = estimate_result_count(level_set.len(), &rules);
+	let want_gpu = estimated_result_count as i32/count < 100;
+	println!("INFO: estimated result count: {estimated_result_count}; {}", if want_gpu { "trying to use GPU" } else { "using CPU" });
+	if want_gpu && let Some(gpu) = try_setup_gpu()? {
+		// TODO: dropping the gpu buffers immediately is fine for a one-shot cli, but in a batch mode cli or gui
+		// we should cache it
+		let it = find_matching_seeds_gpu(level_set.len(), count as _, &rules, &gpu)?;
+		print!("[");
+		for s in it { print!("{s},"); }
+		println!("]");
+		return AOk(());
+	}
+	if want_gpu {
+		println!("WARNING: No GPU found but estimated result count is small.  A full search of all 2^31 seeds could take a few minutes.");
+	}
+	let it = find_matching_seeds_cpu(level_set.len(), count as _, &rules)?;
+	print!("[");
+	for s in it { print!("{s},"); }
 	println!("]");
 	AOk(())
 }

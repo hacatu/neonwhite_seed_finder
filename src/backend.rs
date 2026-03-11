@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use bit_set::BitSet;
 use itertools::Itertools;
 use anyhow::{Result as AResult, Ok as AOk};
@@ -41,32 +43,83 @@ impl Rule {
 			Self::Subset(_, _, s) => Box::new(s.iter())
 		}
 	}
+}
 
-	pub fn matches(&self, buf: &[u8]) -> bool {
-		match self {
-			Self::Sequence(a, b, v) => buf[*a..*b].iter().zip(v).all(|(&a, &b)|a==b),
-			Self::Subset(a, b, s) => BitSet::from_iter(buf[*a..*b].iter().copied().map_into()).is_superset(s)
+/**
+Returns (subset_rules, sequence_rules) where subset_rules is a vector of bytes where every 14 bytes corresponds to one entry
+(a, b, 12 byte bitset), and sequence_rules is a vector of bytes where the rules are variable length: each one is a, b, followed by b-a bytes
+ */
+pub fn flatten_rules(rules: &[Rule]) -> (Vec<u8>, Vec<u8>) {
+	let mut subset_rules = Vec::new();
+	let mut sequence_rules = Vec::new();
+	for rule in rules {
+		match rule {
+			Rule::Subset(a, b, s) => {
+				subset_rules.push((*a)as _);
+				subset_rules.push((*b)as _);
+				for b in 0..12 {
+					let mut x = 0;
+					for a in 0..8 {
+						if s.contains(b*8 + a) {
+							x |= 1 << a;
+						}
+					}
+					subset_rules.push(x);
+				}
+			},
+			Rule::Sequence(a, b, v) => {
+				sequence_rules.push((*a)as _);
+				sequence_rules.push((*b)as _);
+				sequence_rules.extend(v.iter().copied());
+			}
 		}
 	}
+	(subset_rules, sequence_rules)
+}
+
+pub fn check_shuffle_matches_flattened(buf: &[u8], subset_rules: &[u8], sequence_rules: &[u8]) -> bool {
+	for i in (0..subset_rules.len()).step_by(14) {
+		let mut my_set = [0u8; 12];
+		let a = subset_rules[i]as usize;
+		let b = subset_rules[i+1]as usize;
+		for &k in &buf[a..b] {
+			my_set[k as usize>>3] |= 1 << (k&7);
+		}
+		if !my_set.iter().zip(&subset_rules[i+2..]).all(|(&my_chunk, &subset_chunk)|subset_chunk&!my_chunk == 0) {
+			return false;
+		}
+	}
+	let mut off = 0;
+	while off < sequence_rules.len() {
+		let a = sequence_rules[off]as usize;
+		let b = sequence_rules[off+1]as usize;
+		off += 2;
+		let noff = off + (b-a);
+		if buf[a..b] != sequence_rules[off..noff] {
+			return false;
+		}
+		off = noff;
+	}
+	true
 }
 
 pub fn find_matching_seeds_cpu(level_count: usize, result_count: usize, rules: &[Rule]) -> AResult<impl Iterator<Item=i32>> {
+	let (subset_rules, sequence_rules) = flatten_rules(rules);
 	AOk((0..i32::MAX).into_par_iter().map_init(||Vec::with_capacity(level_count), |buf, s|{
 		get_shuffled_idxs(level_count as _, s, buf);
-		(s, rules.iter().all(|r|r.matches(buf)))
+		(s, check_shuffle_matches_flattened(buf, &subset_rules, &sequence_rules))
 	}).filter_map(|(s, p)|if p {Some(s)} else {None}).take_any(result_count).collect_vec_list().into_iter().flatten())
 }
 
-pub const APPROX_FACTORIALS: [f64; 97] = {
+pub static LOG_FACTORIALS: LazyLock<[f64; 97]> = LazyLock::new(||{
 	let mut res = [0.0; _];
-	res[0] = 1.0;
-	let mut i = 1;
+	let mut i = 2;
 	while i <= 96 {
-		res[i] = i as f64*res[i-1];
+		res[i] = res[i-1] + (i as f64).ln();
 		i += 1;
 	}
 	res
-};
+});
 
 pub fn estimate_result_count(level_count: usize, rules: &[Rule]) -> usize {
 	/*
@@ -80,10 +133,10 @@ pub fn estimate_result_count(level_count: usize, rules: &[Rule]) -> usize {
 	such permutations.  Note that (n choose m) * m! is just n!/(n-m)!.
 	*/
 	let free_elems = level_count - rules.iter().map(Rule::len).sum::<usize>();
-	let approx_valid_perms = rules.iter().filter_map(|r|match r {
+	let log_approx_valid_perms = rules.iter().filter_map(|r|match r {
 		Rule::Sequence(..) => None,
-		Rule::Subset(a, b, s) => Some(APPROX_FACTORIALS[(b-a)as usize]/APPROX_FACTORIALS[(b-a)as usize-s.len()])
-	}).product::<f64>()*APPROX_FACTORIALS[free_elems];
-	(approx_valid_perms*(1u32 << 31)as f64/APPROX_FACTORIALS[level_count])as _
+		Rule::Subset(a, b, s) => Some(LOG_FACTORIALS[(b-a)as usize] - LOG_FACTORIALS[(b-a)as usize-s.len()])
+	}).sum::<f64>() + LOG_FACTORIALS[free_elems];
+	(log_approx_valid_perms + ((1u32 << 31)as f64).ln() - LOG_FACTORIALS[level_count]).exp()as _
 }
 

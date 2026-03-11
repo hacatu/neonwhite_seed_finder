@@ -1,6 +1,6 @@
 use anyhow::{Result as AResult, Ok as AOk, Context};
 use ocl::{ProQue};
-use crate::backend::Rule;
+use crate::backend::{Rule, flatten_rules};
 
 pub struct Gpu {
 	pro_que: ProQue,
@@ -97,30 +97,7 @@ pub fn try_setup_gpu() -> AResult<Option<Gpu>> {
 
 pub fn find_matching_seeds_gpu(level_count: usize, result_count: usize, rules: &[Rule], gpu: &Gpu) -> AResult<impl Iterator<Item=i32>> {
 	let out_buffer = gpu.pro_que.buffer_builder::<u32>().len(16*gpu.wg_size).build().context("Creating GPU result buffer")?;
-	let mut subset_rules = Vec::new();
-	let mut sequence_rules = Vec::new();
-	for rule in rules {
-		match rule {
-			Rule::Subset(a, b, s) => {
-				subset_rules.push((*a)as _);
-				subset_rules.push((*b)as _);
-				for b in 0..12 {
-					let mut x = 0;
-					for a in 0..8 {
-						if s.contains(b*8 + a) {
-							x |= 1 << a;
-						}
-					}
-					subset_rules.push(x);
-				}
-			},
-			Rule::Sequence(a, b, v) => {
-				sequence_rules.push((*a)as _);
-				sequence_rules.push((*b)as _);
-				sequence_rules.extend(v.iter().copied());
-			}
-		}
-	}
+	let (mut subset_rules, mut sequence_rules) = flatten_rules(rules);
 	subset_rules.push(0); // add dummy bytes due to an OpenCL requirement that buffers cannot have size 0
 	sequence_rules.push(0);
 	let subset_rules_buffer = gpu.pro_que.buffer_builder::<u8>()

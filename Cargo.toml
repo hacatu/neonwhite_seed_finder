@@ -1,7 +1,7 @@
 cargo-features = ["profile-rustflags"]
 [package]
 name = "neonwhite_seed_finder"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["hacatu"]
 description = "Find and simulate seeds for neon white level rushes"

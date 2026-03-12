@@ -97,12 +97,14 @@ The rng is C#'s default, which is based on Knuth's subtractive rng, which is a l
 
 So that means we can represent the nth output as `A[n]*s + B[n] mod 2^31-1` for any seed `s`, for some constants `A[n]` and `B[n]`.
 
-Implementing this naively is about 1% slower than just implementing the rng directly (but within variation).  But we can do a meet in the middle
-type thing where we store `A[n]*s_hi` and `A[n]*s_lo + B[n]` and add them together.
+Implementing this naively is about 1% slower than just implementing the rng directly (but within variation).
+
+I have tried a lot of optimizations, but so far nothing has been meaningfully faster:
+- Split `s = s_hi + s_lo` and store a table of `A[n]*s_lo + B[n]` for every `s_lo, n` so that each thread computes `A[n]*s_hi` only once and then for each rng output we just have to do one memory load and one 32 bit modulo add.  Computing `A[n]*s_lo + B[n] mod 2^31-1` is not actually slower because we can actually do it with 32 bit multiplication and some bitshifts.
+- Flatten the rules on the cpu like we do on the gpu so that it's faster to read them.
+- Combine some of the rules to create the most powerful single subset rule that is implied by our rules, so that we can pre-filter with only bitvecs.  Since most of the cost is computing all the rng outputs, this turns out to not help (though I may have messed it up).
 
 ## Possible Improvements/TODO:
-- Change CPU implementation to include speedups from GPU impl (flatten rules into byte vectors and use meet in the middle to compute rng outputs).  I know this would be about 2x faster since I accidentally ran the opencl code on the CPU before fixing it to select the correct device instead of the first device.
-- Add `best` subcommand
+- Add `best` subcommand (currently, neonlite/eventtracker do not seem to output to latest.log or any other file during a rush, so I would probably have to fork eventtracker or look into livesplit (though livesplit is not suitable because it does not work with shuffle mode))
 - Add GUI
-- For a lot of conditions, like "the first x levels must contain these levels", we can greatly simplify shuffling and filtering.  For example, if we only have `k` subset rules, we can just "color" every level one of `k+1` colors and use `ceil(lb(k+1))` bits per element of the shuffle instead of 8.  This is only really worth pursuing in the extreme case when k=1.  That is, we want the first x levels to contain these levels, so we just represent the shuffle as a 96 bit vector with 1s for the levels we want and 0s for others, shuffle this bit vector, and check if the first x bits contain enough 1s at the end.  This is low priority because although it would be easy, it only really works for simple conditions with one subset rule and no sequence rules.  Although basically all realistic queries will be one or two subset rules about the beginning and/or end of the shuffle, so I might do just those cases, since it is likely over 2x faster.
 

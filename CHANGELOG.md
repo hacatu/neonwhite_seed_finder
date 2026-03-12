@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/hacatu/neonwhite_seed_finder/compare/v0.1.0...v0.1.1) - 2026-03-12
+
+### Other
+
+- Basic early exit for GPU; fix subcommand guess
+- Update readme
+- Optimize rule representation
+- Rewite GPU impl (same speed sadly)
+- Update readme
+- release v0.1.0
+
 ## [0.1.0](https://github.com/hacatu/neonwhite_seed_finder/releases/tag/v0.1.0) - 2026-03-10
 
 ### Other

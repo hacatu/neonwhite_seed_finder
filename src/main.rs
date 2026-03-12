@@ -149,9 +149,9 @@ fn try_best(_args: Vec<String>) -> AResult<()> {
 
 fn main() -> AResult<()> {
 	let args = std::env::args().collect_vec();
-	if args.iter().any(|s|s.contains(":")) {
+	if args.iter().skip(1).any(|s|s.contains(":")) {
 		try_find(args)
-	} else if args.iter().any(|s|s.contains(".")) {
+	} else if args.iter().skip(1).any(|s|s.contains(".")) {
 		try_best(args)
 	} else if args.len() == 1 || (args.len() == 2 && "help".starts_with(&args[1])) {
 		print_info();

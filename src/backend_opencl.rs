@@ -13,6 +13,7 @@ pub fn try_setup_gpu() -> AResult<Option<Gpu>> {
 		__constant const unsigned BS[96] = {1559595546, 1755192844, 1649316166, 1198642031, 442452829, 1200195957, 1945678308, 949569752, 2099272109, 587775847, 626863973, 1003550677, 1358625013, 1008269081, 2109153755, 65212616, 1851925803, 2137491580, 1454235444, 675580731, 1754296375, 1821177336, 2130093701, 70062080, 1503113964, 1130186590, 2005789796, 1476653312, 1174277203, 174182291, 401846963, 973512717, 638171722, 2122881600, 1380182313, 1638451829, 65271247, 818200948, 736891500, 2056119311, 1084756724, 1537539262, 255459778, 587232589, 1947978014, 1706746116, 724046315, 981848395, 315304373, 475269784, 880625662, 1543454120, 1331075398, 1047903413, 418573418, 1885901857, 1772582790, 1579254086, 1843011714, 1459749886, 1341889808, 469024996, 1922776196, 1925089818, 185928884, 1800834903, 365378955, 1383227060, 1775570415, 470701926, 2147425016, 1033724855, 1400600080, 1545599780, 1738307654, 216757113, 1565717558, 1542861112, 269567713, 1943851495, 406140275, 1023941401, 1161348939, 699007419, 1441040276, 1005876490, 1789920966, 1737751956, 1704308182, 1641764103, 2013352686, 633500808, 1122672881, 1424625261, 714229503, 615731728};
 		__kernel void gather_matching_seeds(
 			__global unsigned *out,
+			const unsigned step,
 			const unsigned char rush_len,
 			const unsigned char subset_rules_len,
 			const unsigned short sequence_rules_size,
@@ -29,7 +30,7 @@ pub fn try_setup_gpu() -> AResult<Option<Gpu>> {
 			unsigned my_count = 0;
 			unsigned char buf[96];
 			unsigned char my_set[12];
-			for(unsigned s = s_hi; s < s_hi + S_LO_BOUND; ++s){
+			for(unsigned s = s_hi + (S_LO_BOUND >> 3)*step; s < s_hi + (S_LO_BOUND >> 3)*(step+1); ++s){
 				for(unsigned char i = 0; i < rush_len; ++i){
 					buf[i] = i;
 				}
@@ -106,18 +107,25 @@ pub fn find_matching_seeds_gpu(level_count: usize, result_count: usize, rules: &
 	let sequence_rules_buffer = gpu.pro_que.buffer_builder::<u8>()
 		.len(sequence_rules.len()).copy_host_slice(&sequence_rules)
 		.build().context("Creating GPU sequence rule buffer")?;
-	let kernel = gpu.pro_que.kernel_builder("gather_matching_seeds")
-		.arg(&out_buffer).arg(level_count as u8)
-		.arg((subset_rules.len()/14)as u8).arg(sequence_rules.len()as u16-1)
-		.arg(&subset_rules_buffer).arg(&sequence_rules_buffer)
-		.build().context("Preparing GPU call")?;
-	// println!("DEBUG: all buffers are ready");
-	unsafe { kernel.enq().context("Calling GPU code")?; }
-	// println!("DEBUG: GPU code finished!");
 	let mut out = vec![0; out_buffer.len()];
-	// println!("DEBUG: result buffer allocated, doing read");
-	out_buffer.read(&mut out).enq().context("Reading GPU result")?;
-	// println!("DEBUG: read completed!");
-	AOk(out.into_iter().filter_map(|x|match x { u32::MAX => None, x => Some(x as _) }).take(result_count))
+	let mut res = Vec::with_capacity(result_count);
+	for step in 0u32..8 {
+		let kernel = gpu.pro_que.kernel_builder("gather_matching_seeds")
+			.arg(&out_buffer).arg(step as u32).arg(level_count as u8)
+			.arg((subset_rules.len()/14)as u8).arg(sequence_rules.len()as u16-1)
+			.arg(&subset_rules_buffer).arg(&sequence_rules_buffer)
+			.build().context("Preparing GPU call")?;
+		// println!("DEBUG: all buffers are ready");
+		unsafe { kernel.enq().context("Calling GPU code")?; }
+		// println!("DEBUG: GPU code finished!");
+		// println!("DEBUG: result buffer allocated, doing read");
+		out_buffer.read(&mut out).enq().context("Reading GPU result")?;
+		// println!("DEBUG: read completed!");
+		out.iter().filter_map(|&x|if x == u32::MAX { None } else { Some(x as i32) }).take(result_count-res.len()).collect_into(&mut res);
+		if res.len() == result_count {
+			break;
+		}
+	}
+	AOk(res.into_iter())
 }
 

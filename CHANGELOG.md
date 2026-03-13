@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/hacatu/neonwhite_seed_finder/compare/v0.1.1...v0.1.2) - 2026-03-13
+
+### Other
+
+- Fix readme images more
+- Fix readme images
+- Added example images
+- Added GUI and refactored
+- Separate rule checking; improve whitespace removal
+- Add alternate name for clocktower so ct, etc work
+
 ## [0.1.1](https://github.com/hacatu/neonwhite_seed_finder/compare/v0.1.0...v0.1.1) - 2026-03-12
 
 ### Other

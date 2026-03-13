@@ -66,9 +66,9 @@ pub fn lookup_name(name: &str, level_set: &BitSet) -> AResult<usize> {
 	})
 }
 
-pub fn guess_rush_from_abbr(rush_abbr: &[String]) -> AResult<(&'static str, &BitSet)> {
+pub fn guess_rush_from_abbr(rush_abbr: &[String]) -> AResult<(&'static str, &'static BitSet)> {
 	let cleanedname = rush_abbr.into_iter().map(|s|s.to_lowercase()).join(" ");
-	if cleanedname.len() == 0 {
+	if cleanedname.trim().len() == 0 {
 		return AOk(("White", &LEVEL_SETS["White"]));
 	}
 	if let Ok(idx) = i32::from_str_radix(&cleanedname.replace(|s: char|s.is_whitespace(), ""), 10) {
@@ -101,7 +101,7 @@ pub fn guess_rush_from_abbr(rush_abbr: &[String]) -> AResult<(&'static str, &Bit
 	}
 	let mut res: Option<(&str, &BitSet)> = None;
 	for (&fullname, level_set) in LEVEL_SETS.iter() {
-		if is_abbreviation(cleanedname.as_str(), fullname) {
+		if is_abbreviation(cleanedname.trim(), fullname) {
 			if res.is_some() {
 				bail!("Rush abbreviation \"{cleanedname}\" is ambiguous and could match {} or {fullname}", res.unwrap().0);
 			}
@@ -189,12 +189,10 @@ pub fn guess_rule_once(description: &str, level_set: &BitSet) -> AResult<Rule> {
 	AOk(res)
 }
 
-pub fn guess_rules_from_description(description: &[String], level_set: &BitSet) -> AResult<Vec<Rule>> {
-	let description = description.join(" ");
-	let res: Vec<_> = description.split("&").map(|s|guess_rule_once(s, level_set)).try_collect()?;
+pub fn check_rules(rules: &[Rule], level_set: &BitSet) -> AResult<()> {
 	let mut domains = vec![None; level_set.len()];
 	let mut codomains = vec![None; level_set.len()];
-	for (i, rule) in res.iter().enumerate() {
+	for (i, rule) in rules.iter().enumerate() {
 		for j in rule.iter_domain() {
 			match &mut domains[j] {
 				Some(i0) => {
@@ -212,6 +210,13 @@ pub fn guess_rules_from_description(description: &[String], level_set: &BitSet) 
 			}
 		}
 	}
+	AOk(())
+}
+
+pub fn guess_rules_from_description(description: &[String], level_set: &BitSet) -> AResult<Vec<Rule>> {
+	let description = description.join(" ");
+	let res: Vec<_> = description.split("&").map(|s|guess_rule_once(s, level_set)).try_collect()?;
+	check_rules(&res, level_set)?;
 	AOk(res)
 }
 

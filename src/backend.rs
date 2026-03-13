@@ -1,5 +1,4 @@
 use std::sync::LazyLock;
-
 use bit_set::BitSet;
 use itertools::Itertools;
 use anyhow::{Result as AResult, Ok as AOk};

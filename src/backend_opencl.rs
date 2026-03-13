@@ -115,12 +115,8 @@ pub fn find_matching_seeds_gpu(level_count: usize, result_count: usize, rules: &
 			.arg((subset_rules.len()/14)as u8).arg(sequence_rules.len()as u16-1)
 			.arg(&subset_rules_buffer).arg(&sequence_rules_buffer)
 			.build().context("Preparing GPU call")?;
-		// println!("DEBUG: all buffers are ready");
 		unsafe { kernel.enq().context("Calling GPU code")?; }
-		// println!("DEBUG: GPU code finished!");
-		// println!("DEBUG: result buffer allocated, doing read");
 		out_buffer.read(&mut out).enq().context("Reading GPU result")?;
-		// println!("DEBUG: read completed!");
 		out.iter().filter_map(|&x|if x == u32::MAX { None } else { Some(x as i32) }).take(result_count-res.len()).collect_into(&mut res);
 		if res.len() == result_count {
 			break;

@@ -105,7 +105,7 @@ extern crate test;
 mod bench {
 	#![allow(unused_imports)]
 	use std::hint::black_box;
-	use crate::{test_helpers::{DotnetRandom, test}, get_shuffled_idxs};
+	use crate::{test_helpers::{DotnetRandom, test}, backend::get_shuffled_idxs};
 
 	#[bench]
 	fn test_linearized(b: &mut test::Bencher) {

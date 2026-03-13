@@ -27,7 +27,7 @@ The CPU version takes 27 seconds to search all seeds with the above filter on my
 
 The program now has a GUI!  If you double click it (or run with no arguments), it will open the gui
 
-<img src="https://raw.githubhsercontent.com/hacatu/neonwhite_seed_finder/refs/heads/master/resources/ttt_ct_abso_water_move_godsp.png"> &nbsp; &nbsp; <img src="https://raw.githubhsercontent.com/hacatu/neonwhite_seed_finder/refs/heads/master/resources/jdroach_test.png">
+<img src="https://raw.githubusercontent.com/hacatu/neonwhite_seed_finder/refs/heads/master/resources/ttt_ct_abso_water_move_godsp.png"> &nbsp; &nbsp; <img src="https://raw.githubusercontent.com/hacatu/neonwhite_seed_finder/refs/heads/master/resources/jdroach_test.png">
 
 There are three ways to use the program:
 - Find seeds matching a description, if the command line input appears to contain a description

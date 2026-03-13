@@ -127,7 +127,8 @@ pub static ALL_LEVELS: LazyLock<Vec<&'static str>> = LazyLock::new(||vec![
 
 pub static ALTERNATE_NAMES: LazyLock<Vec<(&'static str, usize)>> = LazyLock::new(||vec![
 	("Fisherman Souplex", 97 + 8 + 8 + 3),
-	("Special Task Force", 97 + 8 + 8 + 4)
+	("Special Task Force", 97 + 8 + 8 + 4),
+	("Clock Tower", 32),
 ]);
 
 pub static LEVEL_SETS: LazyLock<HashMap<&'static str, BitSet>> = LazyLock::new(||HashMap::from([

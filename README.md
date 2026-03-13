@@ -1,5 +1,7 @@
 # Neon White Seed Finder
 
+[![Latest version](https://img.shields.io/crates/v/neonwhite_seed_finder.svg)](https://crates.io/crates/neonwhite_seed_finder)
+
 Find seeds for level rushes with given properties.
 For example, to find all (up to 200) seeds where "The Clocktower", "Absolution", and "The Third Temple" occur within the first 4 levels,
 and "Movement", "Godspeed", and "Waterworks" occur in the last 4, we can do:
@@ -23,6 +25,10 @@ The CPU version takes 27 seconds to search all seeds with the above filter on my
 
 ## Usage Overview
 
+The program now has a GUI!  If you double click it (or run with no arguments), it will open the gui
+
+<img src="https://media.githubhsercontent.com/media/hacatu/neonwhite_seed_finder/refs/heads/master/resources/ttt_ct_abso_water_move_godsp.png"> &nbsp; &nbsp; <img src="https://media.githubhsercontent.com/media/hacatu/neonwhite_seed_finder/refs/heads/master/resources/jdroach_test.png">
+
 There are three ways to use the program:
 - Find seeds matching a description, if the command line input appears to contain a description
 - Find the best seed in terms of reset efficiency (Not yet implemented)
@@ -41,7 +47,7 @@ However, stopping early is not currently supported on GPU.
 The program defaults to GPU if the estimated result count is small and a GPU is found.
 GPU mode is also not guaranteed to return all results: each GPU thread will ignore any seeds it finds after the first 16 that work.
 
-Run the program with no arguments or `help` for a more detailed description.
+Run the program with `help` for a more detailed description.
 
 ## Description Format
 
@@ -106,5 +112,7 @@ I have tried a lot of optimizations, but so far nothing has been meaningfully fa
 
 ## Possible Improvements/TODO:
 - Add `best` subcommand (currently, neonlite/eventtracker do not seem to output to latest.log or any other file during a rush, so I would probably have to fork eventtracker or look into livesplit (though livesplit is not suitable because it does not work with shuffle mode))
-- Add GUI
+- Add a force stop button.  Killing the worker thread will almost certainly not clean up the openCL environment if it is set up, and even
+making it a separate process and killing that might leave dangling resources, so this would probably require making the worker thread do work in
+small chunks so it can check for a kill flag, and it seems not worth it.
 
